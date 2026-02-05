@@ -39,11 +39,13 @@ export async function loadSubtitlesFromYouTube(videoId: string): Promise<Subtitl
   try {
     const response = await fetch(`/api/subtitles?videoId=${videoId}`);
     const data = await response.json();
+    console.log('API response:', data);
 
     if (data.subtitles && data.subtitles.length > 0) {
       return data.subtitles;
     }
 
+    console.log('No subtitles in API response:', data.error || 'empty array');
     return [];
   } catch (error) {
     console.error('Failed to load subtitles from YouTube:', error);

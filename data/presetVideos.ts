@@ -9,6 +9,7 @@ export const presetVideos: PresetVideo[] = [
     category: 'speech',
     difficulty: 'intermediate',
     thumbnail: 'https://img.youtube.com/vi/UF8uR6Z6KLc/mqdefault.jpg',
+    hasSubtitle: true,
   },
   {
     id: '2',
@@ -18,6 +19,7 @@ export const presetVideos: PresetVideo[] = [
     category: 'ted',
     difficulty: 'intermediate',
     thumbnail: 'https://img.youtube.com/vi/arj7oStGLkU/mqdefault.jpg',
+    hasSubtitle: true,
   },
   {
     id: '3',
@@ -27,6 +29,7 @@ export const presetVideos: PresetVideo[] = [
     category: 'education',
     difficulty: 'beginner',
     thumbnail: 'https://img.youtube.com/vi/8KkKuTCFvzI/mqdefault.jpg',
+    hasSubtitle: false,
   },
   {
     id: '4',
@@ -36,6 +39,7 @@ export const presetVideos: PresetVideo[] = [
     category: 'ted',
     difficulty: 'advanced',
     thumbnail: 'https://img.youtube.com/vi/5MgBikgcWnY/mqdefault.jpg',
+    hasSubtitle: true,
   },
   {
     id: '5',
@@ -45,6 +49,7 @@ export const presetVideos: PresetVideo[] = [
     category: 'ted',
     difficulty: 'intermediate',
     thumbnail: 'https://img.youtube.com/vi/eIho2S0ZahI/mqdefault.jpg',
+    hasSubtitle: true,
   },
   {
     id: '6',
@@ -54,5 +59,6 @@ export const presetVideos: PresetVideo[] = [
     category: 'education',
     difficulty: 'beginner',
     thumbnail: 'https://img.youtube.com/vi/JsC9ZHi79jo/mqdefault.jpg',
+    hasSubtitle: false,
   },
 ];

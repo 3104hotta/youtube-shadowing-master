@@ -26,6 +26,7 @@ function PlayerContent() {
     if (videoId) {
       // Load subtitles from YouTube
       loadSubtitles(videoId).then((subs) => {
+        console.log('Loaded subtitles:', subs.length, 'items');
         setSubtitles(subs);
       });
 

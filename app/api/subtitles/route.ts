@@ -1,15 +1,93 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { exec } from 'child_process';
+import { promisify } from 'util';
+import * as fs from 'fs/promises';
+import * as path from 'path';
+import * as os from 'os';
 
-interface CaptionTrack {
-  baseUrl: string;
-  languageCode: string;
-}
+const execAsync = promisify(exec);
 
 interface SubtitleEntry {
   id: number;
   startTime: number;
   endTime: number;
   text: string;
+}
+
+function parseVTT(vttContent: string): SubtitleEntry[] {
+  const subtitles: SubtitleEntry[] = [];
+  const lines = vttContent.split('\n');
+
+  let id = 1;
+  let i = 0;
+
+  // Skip header
+  while (i < lines.length && !lines[i].includes('-->')) {
+    i++;
+  }
+
+  while (i < lines.length) {
+    const line = lines[i].trim();
+
+    // Look for timestamp line
+    if (line.includes('-->')) {
+      // Parse timestamp: 00:00:01.570 --> 00:00:07.510
+      const match = line.match(
+        /(\d{2}):(\d{2}):(\d{2})\.(\d{3})\s*-->\s*(\d{2}):(\d{2}):(\d{2})\.(\d{3})/
+      );
+
+      if (match) {
+        const startTime =
+          parseInt(match[1]) * 3600 +
+          parseInt(match[2]) * 60 +
+          parseInt(match[3]) +
+          parseInt(match[4]) / 1000;
+
+        const endTime =
+          parseInt(match[5]) * 3600 +
+          parseInt(match[6]) * 60 +
+          parseInt(match[7]) +
+          parseInt(match[8]) / 1000;
+
+        // Collect text lines until empty line or next timestamp
+        i++;
+        const textLines: string[] = [];
+        while (i < lines.length && lines[i].trim() && !lines[i].includes('-->')) {
+          // Remove VTT tags like <00:00:07.720><c> and </c>
+          let cleanText = lines[i]
+            .replace(/<\d{2}:\d{2}:\d{2}\.\d{3}>/g, '')
+            .replace(/<\/?c>/g, '')
+            .replace(/align:start position:\d+%/g, '')
+            .trim();
+
+          if (cleanText && !cleanText.startsWith('[') && cleanText !== ' ') {
+            textLines.push(cleanText);
+          }
+          i++;
+        }
+
+        const text = textLines.join(' ').trim();
+        if (text && text.length > 0) {
+          // Avoid duplicate consecutive entries
+          const lastSubtitle = subtitles[subtitles.length - 1];
+          if (!lastSubtitle || lastSubtitle.text !== text) {
+            subtitles.push({
+              id: id++,
+              startTime,
+              endTime,
+              text,
+            });
+          }
+        }
+      } else {
+        i++;
+      }
+    } else {
+      i++;
+    }
+  }
+
+  return subtitles;
 }
 
 export async function GET(request: NextRequest) {
@@ -20,98 +98,47 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'videoId is required' }, { status: 400 });
   }
 
+  // Validate videoId format to prevent command injection
+  if (!/^[a-zA-Z0-9_-]{11}$/.test(videoId)) {
+    return NextResponse.json({ error: 'Invalid videoId format' }, { status: 400 });
+  }
+
+  const tempDir = os.tmpdir();
+  const outputPath = path.join(tempDir, `yt-sub-${videoId}`);
+
   try {
-    // Fetch the YouTube video page to extract caption data
-    const videoPageResponse = await fetch(
-      `https://www.youtube.com/watch?v=${videoId}`,
-      {
-        headers: {
-          'User-Agent':
-            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-        },
-      }
-    );
+    // Use yt-dlp to download subtitles
+    const command = `yt-dlp --write-sub --write-auto-sub --sub-lang en --skip-download -o "${outputPath}" "https://www.youtube.com/watch?v=${videoId}" 2>&1`;
 
-    const html = await videoPageResponse.text();
+    await execAsync(command, { timeout: 30000 });
 
-    // Extract captions data from the page
-    const captionsMatch = html.match(/"captions":\s*(\{[^}]+\})/);
-    if (!captionsMatch) {
-      // Try alternative method - look for timedtext URL
-      const timedTextMatch = html.match(
-        /"captionTracks":\s*\[([^\]]+)\]/
-      );
+    // Try to find the subtitle file
+    const possibleFiles = [
+      `${outputPath}.en.vtt`,
+      `${outputPath}.en-orig.vtt`,
+    ];
 
-      if (!timedTextMatch) {
-        return NextResponse.json(
-          { error: 'No captions available for this video', subtitles: [] },
-          { status: 200 }
-        );
+    let vttContent = '';
+    for (const filePath of possibleFiles) {
+      try {
+        vttContent = await fs.readFile(filePath, 'utf-8');
+        // Clean up the file
+        await fs.unlink(filePath).catch(() => {});
+        break;
+      } catch {
+        continue;
       }
     }
 
-    // Extract caption tracks
-    const captionTracksMatch = html.match(
-      /"captionTracks":\s*(\[[^\]]+\])/
-    );
-
-    if (!captionTracksMatch) {
+    if (!vttContent) {
       return NextResponse.json(
-        { error: 'No caption tracks found', subtitles: [] },
+        { error: 'No subtitles found for this video', subtitles: [] },
         { status: 200 }
       );
     }
 
-    let captionTracks: CaptionTrack[];
-    try {
-      // Clean up the JSON string
-      const cleanJson = captionTracksMatch[1]
-        .replace(/\\u0026/g, '&')
-        .replace(/\\"/g, '"');
-      captionTracks = JSON.parse(cleanJson);
-    } catch {
-      return NextResponse.json(
-        { error: 'Failed to parse caption tracks', subtitles: [] },
-        { status: 200 }
-      );
-    }
-
-    // Find English captions (prefer manual over auto-generated)
-    let selectedTrack = captionTracks.find(
-      (track) => track.languageCode === 'en'
-    );
-
-    // If no English, try any available track
-    if (!selectedTrack && captionTracks.length > 0) {
-      selectedTrack = captionTracks[0];
-    }
-
-    if (!selectedTrack) {
-      return NextResponse.json(
-        { error: 'No suitable caption track found', subtitles: [] },
-        { status: 200 }
-      );
-    }
-
-    // Fetch the actual captions
-    const captionUrl = selectedTrack.baseUrl + '&fmt=json3';
-    const captionResponse = await fetch(captionUrl);
-    const captionData = await captionResponse.json();
-
-    // Parse captions into our subtitle format
-    const subtitles: SubtitleEntry[] = captionData.events
-      ?.filter((event: { segs?: unknown[] }) => event.segs)
-      .map((event: { tStartMs: number; dDurationMs: number; segs: { utf8: string }[] }, index: number) => ({
-        id: index + 1,
-        startTime: event.tStartMs / 1000,
-        endTime: (event.tStartMs + event.dDurationMs) / 1000,
-        text: event.segs
-          .map((seg: { utf8: string }) => seg.utf8)
-          .join('')
-          .replace(/\n/g, ' ')
-          .trim(),
-      }))
-      .filter((sub: SubtitleEntry) => sub.text.length > 0) || [];
+    const subtitles = parseVTT(vttContent);
+    console.log('Fetched subtitles via yt-dlp:', subtitles.length, 'items');
 
     return NextResponse.json({ subtitles });
   } catch (error) {

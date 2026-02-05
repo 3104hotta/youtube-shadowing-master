@@ -17,4 +17,5 @@ export interface PresetVideo {
   category: string;
   difficulty: 'beginner' | 'intermediate' | 'advanced';
   thumbnail: string;
+  hasSubtitle?: boolean;
 }
