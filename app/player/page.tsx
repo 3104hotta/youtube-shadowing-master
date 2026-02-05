@@ -11,7 +11,7 @@ import { RecordButton } from '@/components/shadowing/RecordButton';
 import { ComparisonView } from '@/components/shadowing/ComparisonView';
 import { FavoriteButton } from '@/components/favorites/FavoriteButton';
 import { usePlayerStore } from '@/store/playerStore';
-import { loadSubtitlesFromFile } from '@/lib/youtube/subtitles';
+import { loadSubtitles } from '@/lib/youtube/subtitles';
 import Link from 'next/link';
 
 function PlayerContent() {
@@ -24,8 +24,8 @@ function PlayerContent() {
 
   useEffect(() => {
     if (videoId) {
-      // Load subtitles
-      loadSubtitlesFromFile(videoId).then((subs) => {
+      // Load subtitles from YouTube
+      loadSubtitles(videoId).then((subs) => {
         setSubtitles(subs);
       });
 
