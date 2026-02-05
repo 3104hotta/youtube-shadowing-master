@@ -1,0 +1,58 @@
+import type { PresetVideo } from '@/types/youtube';
+
+export const presetVideos: PresetVideo[] = [
+  {
+    id: '1',
+    videoId: 'UF8uR6Z6KLc',
+    title: "Steve Jobs' 2005 Stanford Commencement Address",
+    description: 'Inspirational speech with clear pronunciation',
+    category: 'speech',
+    difficulty: 'intermediate',
+    thumbnail: 'https://img.youtube.com/vi/UF8uR6Z6KLc/mqdefault.jpg',
+  },
+  {
+    id: '2',
+    videoId: 'arj7oStGLkU',
+    title: 'TED - How to speak so that people want to listen',
+    description: 'Julian Treasure explains the art of speaking',
+    category: 'ted',
+    difficulty: 'intermediate',
+    thumbnail: 'https://img.youtube.com/vi/arj7oStGLkU/mqdefault.jpg',
+  },
+  {
+    id: '3',
+    videoId: '8KkKuTCFvzI',
+    title: 'Learn English with Movies',
+    description: 'English learning with movie clips',
+    category: 'education',
+    difficulty: 'beginner',
+    thumbnail: 'https://img.youtube.com/vi/8KkKuTCFvzI/mqdefault.jpg',
+  },
+  {
+    id: '4',
+    videoId: '5MgBikgcWnY',
+    title: 'The power of introverts - Susan Cain',
+    description: 'TED Talk about introversion and leadership',
+    category: 'ted',
+    difficulty: 'advanced',
+    thumbnail: 'https://img.youtube.com/vi/5MgBikgcWnY/mqdefault.jpg',
+  },
+  {
+    id: '5',
+    videoId: 'eIho2S0ZahI',
+    title: 'How to learn any language in 6 months',
+    description: 'Chris Lonsdale shares language learning tips',
+    category: 'ted',
+    difficulty: 'intermediate',
+    thumbnail: 'https://img.youtube.com/vi/eIho2S0ZahI/mqdefault.jpg',
+  },
+  {
+    id: '6',
+    videoId: 'JsC9ZHi79jo',
+    title: 'English Conversation Practice',
+    description: 'Daily English conversation for beginners',
+    category: 'education',
+    difficulty: 'beginner',
+    thumbnail: 'https://img.youtube.com/vi/JsC9ZHi79jo/mqdefault.jpg',
+  },
+];
