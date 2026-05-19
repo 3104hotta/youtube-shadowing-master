@@ -1,11 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { exec } from 'child_process';
-import { promisify } from 'util';
-import * as fs from 'fs/promises';
-import * as path from 'path';
-import * as os from 'os';
-
-const execAsync = promisify(exec);
+import { YoutubeTranscript } from 'youtube-transcript';
+// @ts-expect-error -- youtube-captions-scraper has no type definitions
+import { getSubtitles } from 'youtube-captions-scraper';
 
 interface SubtitleEntry {
   id: number;
@@ -14,80 +10,72 @@ interface SubtitleEntry {
   text: string;
 }
 
-function parseVTT(vttContent: string): SubtitleEntry[] {
-  const subtitles: SubtitleEntry[] = [];
-  const lines = vttContent.split('\n');
+// youtube-transcript returns text with HTML entities encoded
+// (e.g. "don&amp;#39;t" instead of "don't"). Decode the common cases.
+function decodeHtmlEntities(input: string): string {
+  return input
+    .replace(/&amp;#39;/g, "'")
+    .replace(/&#39;/g, "'")
+    .replace(/&apos;/g, "'")
+    .replace(/&quot;/g, '"')
+    .replace(/&#34;/g, '"')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&amp;/g, '&'); // ampersand LAST to avoid double-decoding
+}
 
-  let id = 1;
-  let i = 0;
+// Primary: youtube-transcript
+// Strict language matching but simple API.
+async function fetchViaYoutubeTranscript(
+  videoId: string
+): Promise<SubtitleEntry[]> {
+  const items = await YoutubeTranscript.fetchTranscript(videoId, {
+    lang: 'en',
+  });
+  return items
+    .map((it, i) => ({
+      id: i + 1,
+      startTime: it.offset,
+      endTime: it.offset + it.duration,
+      text: decodeHtmlEntities(it.text).trim(),
+    }))
+    .filter((s) => s.text.length > 0);
+}
 
-  // Skip header
-  while (i < lines.length && !lines[i].includes('-->')) {
-    i++;
-  }
+// Fallback: youtube-captions-scraper
+// More lenient language matching (matches en-US, en-GB, a.en, etc.)
+// and already decodes HTML entities internally via `he`.
+interface RawCaption {
+  start: string;
+  dur: string;
+  text: string;
+}
 
-  while (i < lines.length) {
-    const line = lines[i].trim();
+async function fetchViaCaptionsScraper(
+  videoId: string
+): Promise<SubtitleEntry[]> {
+  const items: RawCaption[] = await getSubtitles({
+    videoID: videoId,
+    lang: 'en',
+  });
+  return items
+    .map((it, i) => {
+      const start = parseFloat(it.start);
+      const dur = parseFloat(it.dur);
+      return {
+        id: i + 1,
+        startTime: start,
+        endTime: start + dur,
+        text: it.text.trim(),
+      };
+    })
+    .filter((s) => s.text.length > 0);
+}
 
-    // Look for timestamp line
-    if (line.includes('-->')) {
-      // Parse timestamp: 00:00:01.570 --> 00:00:07.510
-      const match = line.match(
-        /(\d{2}):(\d{2}):(\d{2})\.(\d{3})\s*-->\s*(\d{2}):(\d{2}):(\d{2})\.(\d{3})/
-      );
-
-      if (match) {
-        const startTime =
-          parseInt(match[1]) * 3600 +
-          parseInt(match[2]) * 60 +
-          parseInt(match[3]) +
-          parseInt(match[4]) / 1000;
-
-        const endTime =
-          parseInt(match[5]) * 3600 +
-          parseInt(match[6]) * 60 +
-          parseInt(match[7]) +
-          parseInt(match[8]) / 1000;
-
-        // Collect text lines until empty line or next timestamp
-        i++;
-        const textLines: string[] = [];
-        while (i < lines.length && lines[i].trim() && !lines[i].includes('-->')) {
-          // Remove VTT tags like <00:00:07.720><c> and </c>
-          let cleanText = lines[i]
-            .replace(/<\d{2}:\d{2}:\d{2}\.\d{3}>/g, '')
-            .replace(/<\/?c>/g, '')
-            .replace(/align:start position:\d+%/g, '')
-            .trim();
-
-          if (cleanText && !cleanText.startsWith('[') && cleanText !== ' ') {
-            textLines.push(cleanText);
-          }
-          i++;
-        }
-
-        const text = textLines.join(' ').trim();
-        if (text && text.length > 0) {
-          // Avoid duplicate consecutive entries
-          const lastSubtitle = subtitles[subtitles.length - 1];
-          if (!lastSubtitle || lastSubtitle.text !== text) {
-            subtitles.push({
-              id: id++,
-              startTime,
-              endTime,
-              text,
-            });
-          }
-        }
-      } else {
-        i++;
-      }
-    } else {
-      i++;
-    }
-  }
-
-  return subtitles;
+function errorMessage(err: unknown): string {
+  if (err instanceof Error) return err.message;
+  return String(err);
 }
 
 export async function GET(request: NextRequest) {
@@ -98,54 +86,47 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'videoId is required' }, { status: 400 });
   }
 
-  // Validate videoId format to prevent command injection
+  // Validate format (defense in depth, even though we no longer shell out).
   if (!/^[a-zA-Z0-9_-]{11}$/.test(videoId)) {
     return NextResponse.json({ error: 'Invalid videoId format' }, { status: 400 });
   }
 
-  const tempDir = os.tmpdir();
-  const outputPath = path.join(tempDir, `yt-sub-${videoId}`);
-
+  // A: youtube-transcript
   try {
-    // Use yt-dlp to download subtitles
-    const command = `yt-dlp --write-sub --write-auto-sub --sub-lang en --skip-download -o "${outputPath}" "https://www.youtube.com/watch?v=${videoId}" 2>&1`;
-
-    await execAsync(command, { timeout: 30000 });
-
-    // Try to find the subtitle file
-    const possibleFiles = [
-      `${outputPath}.en.vtt`,
-      `${outputPath}.en-orig.vtt`,
-    ];
-
-    let vttContent = '';
-    for (const filePath of possibleFiles) {
-      try {
-        vttContent = await fs.readFile(filePath, 'utf-8');
-        // Clean up the file
-        await fs.unlink(filePath).catch(() => {});
-        break;
-      } catch {
-        continue;
-      }
-    }
-
-    if (!vttContent) {
-      return NextResponse.json(
-        { error: 'No subtitles found for this video', subtitles: [] },
-        { status: 200 }
+    const subtitles = await fetchViaYoutubeTranscript(videoId);
+    if (subtitles.length > 0) {
+      console.log(
+        `[subtitles] youtube-transcript: ${subtitles.length} items for ${videoId}`
       );
+      return NextResponse.json({ subtitles });
     }
-
-    const subtitles = parseVTT(vttContent);
-    console.log('Fetched subtitles via yt-dlp:', subtitles.length, 'items');
-
-    return NextResponse.json({ subtitles });
-  } catch (error) {
-    console.error('Error fetching subtitles:', error);
-    return NextResponse.json(
-      { error: 'Failed to fetch subtitles', subtitles: [] },
-      { status: 200 }
+  } catch (err) {
+    console.warn(
+      `[subtitles] youtube-transcript failed for ${videoId}:`,
+      errorMessage(err)
     );
   }
+
+  // B: youtube-captions-scraper (fallback)
+  try {
+    const subtitles = await fetchViaCaptionsScraper(videoId);
+    if (subtitles.length > 0) {
+      console.log(
+        `[subtitles] youtube-captions-scraper: ${subtitles.length} items for ${videoId}`
+      );
+      return NextResponse.json({ subtitles });
+    }
+  } catch (err) {
+    console.warn(
+      `[subtitles] youtube-captions-scraper failed for ${videoId}:`,
+      errorMessage(err)
+    );
+  }
+
+  // Both providers failed or returned empty. Keep existing contract:
+  // 200 + empty subtitles array so the client can show "no subtitles" UI.
+  return NextResponse.json(
+    { error: 'No subtitles found for this video', subtitles: [] },
+    { status: 200 }
+  );
 }
