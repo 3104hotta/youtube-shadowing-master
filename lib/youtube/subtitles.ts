@@ -35,39 +35,13 @@ export function parseSRT(srtContent: string): Subtitle[] {
   return subtitles;
 }
 
-export async function loadSubtitlesFromYouTube(videoId: string): Promise<Subtitle[]> {
-  try {
-    const response = await fetch(`/api/subtitles?videoId=${videoId}`);
-    const data = await response.json();
-    console.log('API response:', data);
-
-    if (data.subtitles && data.subtitles.length > 0) {
-      return data.subtitles;
-    }
-
-    console.log('No subtitles in API response:', data.error || 'empty array');
-    return [];
-  } catch (error) {
-    console.error('Failed to load subtitles from YouTube:', error);
-    return [];
-  }
-}
-
 export async function loadSubtitles(videoId: string): Promise<Subtitle[]> {
-  // First try to load from local SRT file
   try {
-    const response = await fetch(`/subtitles/${videoId}.srt`);
-    if (response.ok) {
-      const srtContent = await response.text();
-      const subtitles = parseSRT(srtContent);
-      if (subtitles.length > 0) {
-        return subtitles;
-      }
-    }
+    const res = await fetch(`/subtitles/${videoId}.srt`);
+    if (!res.ok) return [];
+    const srt = await res.text();
+    return parseSRT(srt);
   } catch {
-    // Local file not found, continue to YouTube API
+    return [];
   }
-
-  // Fall back to YouTube API
-  return loadSubtitlesFromYouTube(videoId);
 }
