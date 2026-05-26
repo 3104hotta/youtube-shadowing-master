@@ -68,9 +68,22 @@ function PlayerContent() {
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Left column: Player and controls */}
-          <div className="lg:col-span-2 space-y-4">
+          {/* Video player - top of left column on desktop, top on mobile */}
+          <div className="lg:col-span-2">
             <YouTubePlayer videoId={videoId} />
+          </div>
+
+          {/* Subtitles - right column on desktop (spans both rows, sticky),
+              directly under video on mobile */}
+          <div className="lg:col-span-1 lg:row-span-2">
+            <div className="bg-white p-4 rounded-lg border border-gray-200 lg:sticky lg:top-4">
+              <SubtitleDisplay />
+            </div>
+          </div>
+
+          {/* Controls and shadowing - left column below video on desktop,
+              below subtitles on mobile */}
+          <div className="lg:col-span-2 space-y-4">
             <PlayerControls />
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -89,13 +102,6 @@ function PlayerContent() {
                   recognizedText={recognizedText}
                 />
               </div>
-            </div>
-          </div>
-
-          {/* Right column: Subtitles */}
-          <div className="lg:col-span-1">
-            <div className="bg-white p-4 rounded-lg border border-gray-200 sticky top-4">
-              <SubtitleDisplay />
             </div>
           </div>
         </div>

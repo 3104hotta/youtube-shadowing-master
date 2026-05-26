@@ -29,7 +29,7 @@ export const presetVideos: PresetVideo[] = [
     category: 'education',
     difficulty: 'beginner',
     thumbnail: 'https://img.youtube.com/vi/8KkKuTCFvzI/mqdefault.jpg',
-    hasSubtitle: false,
+    hasSubtitle: true,
   },
   {
     id: '4',
@@ -59,6 +59,6 @@ export const presetVideos: PresetVideo[] = [
     category: 'education',
     difficulty: 'beginner',
     thumbnail: 'https://img.youtube.com/vi/JsC9ZHi79jo/mqdefault.jpg',
-    hasSubtitle: false,
+    hasSubtitle: true,
   },
 ];
